@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Study Helper for SA icon">
+  <defs>
+    <linearGradient id="bg" x1="0%" x2="100%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#1e79ff" />
+      <stop offset="60%" stop-color="#55a6ff" />
+      <stop offset="100%" stop-color="#56d6c6" />
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="64" fill="url(#bg)" />
+  <rect x="42" y="34" width="172" height="188" rx="28" fill="#f8fbff" opacity="0.92" />
+  <rect x="60" y="58" width="136" height="96" rx="16" fill="#dff1ff" />
+  <path d="M77 89h102" stroke="#1e79ff" stroke-width="12" stroke-linecap="round" />
+  <path d="M77 116h82" stroke="#56d6c6" stroke-width="12" stroke-linecap="round" />
+  <circle cx="176" cy="176" r="28" fill="#ffd375" />
+  <path d="M117 178c8-10 17-15 28-15 9 0 15 3 19 7" stroke="#1e79ff" stroke-width="10" fill="none" stroke-linecap="round" />
+  <path d="M80 182l18-18 16 16 34-34" stroke="#1e79ff" stroke-width="12" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+</svg>
