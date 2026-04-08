@@ -1,4 +1,4 @@
-const CACHE_NAME = "study-helper-sa-tablet-v3";
+const CACHE_NAME = "study-helper-sa-tablet-v4";
 const APP_ROOT = new URL("./", self.location.href);
 const INDEX_URL = new URL("index.html", APP_ROOT).pathname;
 const CORE_ASSETS = ["", "index.html", "styles.css", "app.js", "manifest.webmanifest", "favicon.svg"].map(
