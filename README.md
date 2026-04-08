@@ -10,6 +10,16 @@
 
 기획, 설계, 진행 기록은 `project-materials/` 폴더를 보면 됩니다.
 
+## GitHub 배포
+
+- GitHub 저장소: `https://github.com/why8410/Study-Helper-for-SA`
+- GitHub Actions 기반 Pages 배포 워크플로: `.github/workflows/deploy-pages.yml`
+- GitHub Pages 프로젝트 주소 형식:
+  - `https://why8410.github.io/Study-Helper-for-SA/`
+
+이 저장소는 GitHub Pages 하위 경로에서도 열리도록
+상대 경로와 서비스 워커 등록 경로를 맞춰두었습니다.
+
 ## 이 버전의 핵심
 
 - Android 태블릿 브라우저 중심

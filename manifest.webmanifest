@@ -2,7 +2,8 @@
   "name": "Study Helper for SA",
   "short_name": "Study Helper",
   "description": "영어 문제를 사진으로 읽고 힌트 중심으로 코칭하는 학습 도우미",
-  "start_url": "/",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#f7fbff",
   "theme_color": "#1e79ff",
@@ -10,7 +11,7 @@
   "orientation": "portrait",
   "icons": [
     {
-      "src": "/favicon.svg",
+      "src": "favicon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"

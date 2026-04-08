@@ -1,6 +1,7 @@
 import subprocess
 import sys
 import unittest
+import json
 from pathlib import Path
 from html.parser import HTMLParser
 
@@ -32,7 +33,8 @@ class StaticAppTest(unittest.TestCase):
 
     def test_html_contains_recent_history_and_share_controls(self):
         parser = IdParser()
-        parser.feed((BASE_DIR / "index.html").read_text(encoding="utf-8"))
+        html = (BASE_DIR / "index.html").read_text(encoding="utf-8")
+        parser.feed(html)
 
         for required_id in [
             "camera-overlay",
@@ -44,6 +46,20 @@ class StaticAppTest(unittest.TestCase):
             "clear-history-button",
         ]:
             self.assertIn(required_id, parser.ids)
+
+        for expected_asset_reference in [
+            'href="manifest.webmanifest"',
+            'href="favicon.svg"',
+            'href="styles.css"',
+            'src="app.js"',
+        ]:
+            self.assertIn(expected_asset_reference, html)
+
+    def test_manifest_uses_relative_paths_for_project_site_deployments(self):
+        manifest = json.loads((BASE_DIR / "manifest.webmanifest").read_text(encoding="utf-8"))
+        self.assertEqual("./", manifest["start_url"])
+        self.assertEqual("./", manifest["scope"])
+        self.assertEqual("favicon.svg", manifest["icons"][0]["src"])
 
     def test_release_bundle_builder_creates_expected_files(self):
         result = subprocess.run(

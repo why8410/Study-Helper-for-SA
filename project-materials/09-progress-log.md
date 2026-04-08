@@ -100,3 +100,17 @@
 
 - 배포 가이드의 현재 상태 설명을 실제 진행 로그와 맞게 정리
 - 루트 `README.md` 에 릴리스 폴더 안 생성 안내 파일을 명시
+
+## 2026-04-08
+
+### GitHub 업로드
+
+- 프로젝트 폴더를 Git 저장소로 초기화하고 `main` 브랜치 기준 첫 커밋 생성
+- GitHub 계정 `why8410` 에 `Study-Helper-for-SA` 저장소 생성 후 원격 푸시 완료
+
+### GitHub Pages 준비
+
+- GitHub Pages 프로젝트 경로에서도 깨지지 않도록 정적 자산 경로를 상대 경로 기준으로 정리
+- `manifest.webmanifest` 의 `start_url`, `scope`, 아이콘 경로를 프로젝트 배포에 맞게 조정
+- 서비스 워커 등록 경로와 오프라인 fallback 경로를 프로젝트 하위 경로에 맞게 보강
+- `.github/workflows/deploy-pages.yml` 추가로 GitHub Actions 기반 Pages 배포 준비
