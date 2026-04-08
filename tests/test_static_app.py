@@ -41,7 +41,10 @@ class StaticAppTest(unittest.TestCase):
             "close-camera-button",
             "share-chatgpt-prompt-button",
             "copy-chatgpt-prompt-button",
+            "result-details-toggle",
+            "analysis-phase-idle",
             "answer-audio-button",
+            "final-stage-card",
             "history-list",
             "clear-history-button",
         ]:

@@ -1,5 +1,6 @@
 const state = {
   stream: null,
+  imageCapture: null,
   latestImageDataUrl: "",
   latestOcrText: "",
   latestRecognizedNumbers: [],
@@ -7,10 +8,12 @@ const state = {
   latestResponse: null,
   historyItems: [],
   revealedHints: new Set(),
+  isFinalAnswerRevealed: false,
   speechRecognition: null,
   isListening: false,
   preferredVoice: null,
   installPromptEvent: null,
+  analysisPhase: "idle",
 };
 
 const elements = {
@@ -31,6 +34,9 @@ const elements = {
   voiceButton: document.getElementById("voice-button"),
   analyzeButton: document.getElementById("analyze-button"),
   statusBox: document.getElementById("status-box"),
+  resultDetailsToggle: document.getElementById("result-details-toggle"),
+  resultDetails: document.getElementById("result-details"),
+  analysisPhaseButtons: Array.from(document.querySelectorAll("[data-phase-step]")),
   selectedProblemNumber: document.getElementById("selected-problem-number"),
   problemSummary: document.getElementById("problem-summary"),
   problemNumberList: document.getElementById("problem-number-list"),
@@ -40,6 +46,7 @@ const elements = {
   ocrTextFull: document.getElementById("ocr-text-full"),
   ocrStatePill: document.getElementById("ocr-state-pill"),
   hintsGrid: document.getElementById("hints-grid"),
+  finalStageCard: document.getElementById("final-stage-card"),
   revealAnswerButton: document.getElementById("reveal-answer-button"),
   answerAudioButton: document.getElementById("answer-audio-button"),
   finalAnswerText: document.getElementById("final-answer-text"),
@@ -58,12 +65,13 @@ function init() {
   initializeInstallPrompt();
   registerServiceWorker();
   loadHistory();
-  renderEmptyHints();
   refreshFieldStates();
-  resetAnswerCard();
   renderHistory();
   updateAppMode();
   updateCaptureButtonLabel();
+  setAnalysisPhase("idle");
+  toggleResultDetails(false);
+  resetResultPanel();
 }
 
 function bindEvents() {
@@ -79,6 +87,9 @@ function bindEvents() {
   elements.shareChatgptPromptButton.addEventListener("click", shareChatGptPrompt);
   elements.clearHistoryButton.addEventListener("click", clearHistory);
   elements.installButton.addEventListener("click", installApp);
+  elements.resultDetailsToggle.addEventListener("click", () => {
+    toggleResultDetails(elements.resultDetails.hidden);
+  });
 
   [elements.requestText, elements.manualProblemNumber, elements.typedProblemText].forEach((field) => {
     field.addEventListener("input", () => {
@@ -122,6 +133,39 @@ function setOcrState(message) {
   elements.ocrStatePill.textContent = message;
 }
 
+function setAnalysisPhase(phase) {
+  state.analysisPhase = phase;
+  elements.analysisPhaseButtons.forEach((button) => {
+    const isActive = button.dataset.phaseStep === phase;
+    button.classList.toggle("is-active", isActive);
+    button.setAttribute("aria-pressed", String(isActive));
+  });
+}
+
+function toggleResultDetails(forceOpen) {
+  const shouldOpen = typeof forceOpen === "boolean" ? forceOpen : elements.resultDetails.hidden;
+  elements.resultDetails.hidden = !shouldOpen;
+  elements.resultDetailsToggle.setAttribute("aria-expanded", String(shouldOpen));
+}
+
+function resetResultPanel() {
+  state.latestResponse = null;
+  state.revealedHints = new Set();
+  state.isFinalAnswerRevealed = false;
+  toggleResultDetails(false);
+  elements.selectedProblemNumber.textContent = "-";
+  elements.problemSummary.textContent = "아직 분석 전";
+  elements.sourceExcerptText.textContent = "사진이나 직접 입력한 문제 문장이 여기에 보입니다.";
+  elements.translationText.textContent = "분석이 끝나면 쉬운 한국어로 문제 뜻을 알려줍니다.";
+  elements.thinkingPromptText.textContent = "정답 대신 먼저 봐야 할 단서를 알려줍니다.";
+  elements.ocrTextFull.textContent = "아직 OCR 결과가 없습니다.";
+  renderProblemChips({ recognizedProblemNumbers: [] });
+  renderEmptyHints();
+  resetAnswerCard();
+  setOcrState("OCR 대기 중");
+  setAnalysisPhase("idle");
+}
+
 function syncFieldState(element) {
   element.classList.toggle("has-value", Boolean(String(element.value || "").trim()));
 }
@@ -154,11 +198,13 @@ function hideCameraOverlay() {
 function stopCameraStream() {
   if (!state.stream) {
     elements.cameraPreview.srcObject = null;
+    state.imageCapture = null;
     return;
   }
 
   state.stream.getTracks().forEach((track) => track.stop());
   state.stream = null;
+  state.imageCapture = null;
   elements.cameraPreview.srcObject = null;
 }
 
@@ -214,6 +260,51 @@ function getAppBaseUrl() {
   return new URL("./", window.location.href);
 }
 
+async function maximizeCameraTrack(track) {
+  if (!track || typeof track.applyConstraints !== "function") return;
+
+  const capabilities = typeof track.getCapabilities === "function" ? track.getCapabilities() : {};
+  const advanced = {};
+
+  if (capabilities.width?.max) advanced.width = capabilities.width.max;
+  if (capabilities.height?.max) advanced.height = capabilities.height.max;
+  if (Array.isArray(capabilities.focusMode) && capabilities.focusMode.includes("continuous")) {
+    advanced.focusMode = "continuous";
+  }
+  if (Array.isArray(capabilities.exposureMode) && capabilities.exposureMode.includes("continuous")) {
+    advanced.exposureMode = "continuous";
+  }
+  if (Array.isArray(capabilities.whiteBalanceMode) && capabilities.whiteBalanceMode.includes("continuous")) {
+    advanced.whiteBalanceMode = "continuous";
+  }
+
+  if (!Object.keys(advanced).length) return;
+
+  try {
+    await track.applyConstraints({ advanced: [advanced] });
+  } catch (error) {
+    // Ignore if the browser rejects advanced camera constraints.
+  }
+}
+
+function createImageCapture(track) {
+  if (!track || typeof ImageCapture === "undefined") return null;
+  try {
+    return new ImageCapture(track);
+  } catch (error) {
+    return null;
+  }
+}
+
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("촬영 이미지를 읽지 못했어요."));
+    reader.readAsDataURL(blob);
+  });
+}
+
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") {
@@ -235,13 +326,22 @@ async function startCamera() {
   try {
     stopCameraStream();
     const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: "environment" } },
+      video: {
+        facingMode: { ideal: "environment" },
+        width: { ideal: 4096 },
+        height: { ideal: 3072 },
+        aspectRatio: { ideal: 4 / 3 },
+      },
       audio: false,
     });
+    const [track] = stream.getVideoTracks();
+    await maximizeCameraTrack(track);
     state.stream = stream;
+    state.imageCapture = createImageCapture(track);
     elements.cameraPreview.srcObject = stream;
+    elements.cameraPreview.play?.().catch(() => {});
     showCameraOverlay();
-    setStatus("전체화면 촬영을 열었어요. 문제 한 개가 크게 보이게 맞춰 주세요.");
+    setStatus("전체화면 고화질 촬영을 열었어요. 문제 한 개가 크게 보이게 맞춰 주세요.");
   } catch (error) {
     setStatus("카메라를 켜지 못했어요. 브라우저 권한을 확인하거나 사진 업로드를 사용해 주세요.");
   }
@@ -257,35 +357,74 @@ function closeCameraOverlay() {
   );
 }
 
-function captureCurrentFrame() {
+async function captureHighResolutionPhoto() {
+  if (!state.imageCapture?.takePhoto) return "";
+  try {
+    const blob = await state.imageCapture.takePhoto();
+    return await blobToDataUrl(blob);
+  } catch (error) {
+    return "";
+  }
+}
+
+function capturePreviewFrame() {
   if (!elements.cameraPreview.srcObject) {
-    setStatus("먼저 사진 찍기를 눌러 전체화면 촬영을 열어 주세요.");
     return "";
   }
 
   const { videoWidth, videoHeight } = elements.cameraPreview;
-  if (!videoWidth || !videoHeight) {
-    setStatus("카메라 화면이 아직 준비되지 않았어요. 잠깐 뒤에 다시 시도해 주세요.");
-    return "";
-  }
+  if (!videoWidth || !videoHeight) return "";
 
   const canvas = elements.captureCanvas;
   canvas.width = videoWidth;
   canvas.height = videoHeight;
   const ctx = canvas.getContext("2d");
   ctx.drawImage(elements.cameraPreview, 0, 0, videoWidth, videoHeight);
-  state.latestImageDataUrl = canvas.toDataURL("image/png");
+  return canvas.toDataURL("image/png");
+}
+
+function applyPreparedImage(imageDataUrl, readyMessage) {
+  if (!imageDataUrl) return;
+
+  state.latestImageDataUrl = imageDataUrl;
+  state.latestOcrText = "";
+  state.latestRecognizedNumbers = [];
+  state.lastOcrMeta = null;
+  resetResultPanel();
   elements.capturedPreview.src = state.latestImageDataUrl;
   elements.capturedPreview.hidden = false;
   elements.cameraEmpty.hidden = true;
   hideCameraOverlay();
   stopCameraStream();
-  state.latestOcrText = "";
-  state.latestRecognizedNumbers = [];
-  state.lastOcrMeta = null;
   updateCaptureButtonLabel();
-  setStatus("문제를 준비했어요.");
-  return state.latestImageDataUrl;
+  setStatus(readyMessage);
+}
+
+async function captureCurrentFrame() {
+  if (!elements.cameraPreview.srcObject) {
+    setStatus("먼저 사진 찍기를 눌러 전체화면 촬영을 열어 주세요.");
+    return "";
+  }
+
+  if (!elements.cameraPreview.videoWidth || !elements.cameraPreview.videoHeight) {
+    setStatus("카메라 화면이 아직 준비되지 않았어요. 잠깐 뒤에 다시 시도해 주세요.");
+    return "";
+  }
+
+  const highResolutionImage = await captureHighResolutionPhoto();
+  const capturedImage = highResolutionImage || capturePreviewFrame();
+  if (!capturedImage) {
+    setStatus("촬영 이미지를 만들지 못했어요. 잠깐 뒤에 다시 시도해 주세요.");
+    return "";
+  }
+
+  applyPreparedImage(
+    capturedImage,
+    highResolutionImage
+      ? "문제를 고화질로 준비했어요. 글자가 흐리면 한 문제만 더 크게 다시 찍어 주세요."
+      : "문제를 준비했어요. 글자가 흐리면 한 문제만 더 크게 다시 찍어 주세요."
+  );
+  return capturedImage;
 }
 
 function handleImageUpload(event) {
@@ -294,17 +433,7 @@ function handleImageUpload(event) {
 
   const reader = new FileReader();
   reader.onload = () => {
-    hideCameraOverlay();
-    stopCameraStream();
-    state.latestImageDataUrl = String(reader.result || "");
-    state.latestOcrText = "";
-    state.latestRecognizedNumbers = [];
-    state.lastOcrMeta = null;
-    elements.capturedPreview.src = state.latestImageDataUrl;
-    elements.capturedPreview.hidden = false;
-    elements.cameraEmpty.hidden = true;
-    updateCaptureButtonLabel();
-    setStatus("문제를 준비했어요.");
+    applyPreparedImage(String(reader.result || ""), "문제를 준비했어요. 원본 사진이 선명할수록 인식률이 좋아져요.");
   };
   reader.readAsDataURL(file);
 }
@@ -464,6 +593,7 @@ async function runAnalysis(options = {}) {
   }
 
   elements.analyzeButton.disabled = true;
+  setAnalysisPhase("processing");
   stopCoachingAudio();
 
   let ocrText = state.latestOcrText;
@@ -503,6 +633,7 @@ async function runAnalysis(options = {}) {
   } catch (error) {
     setStatus(error.message || "이미지 분석 중 문제가 생겼어요.");
     setOcrState("OCR 실패");
+    setAnalysisPhase(state.latestResponse ? "ready" : "idle");
   } finally {
     elements.analyzeButton.disabled = false;
   }
@@ -513,31 +644,38 @@ async function runClientSideOcr(imageDataUrl) {
     throw new Error("OCR 라이브러리를 아직 불러오지 못했어요. 인터넷 연결을 확인해 주세요.");
   }
 
-  const preparedImage = await resizeImageDataUrl(imageDataUrl, 2200);
-  const primaryImage = await preprocessImageForOcr(preparedImage, { mode: "balanced" });
-  const primaryCandidate = await runOcrPass(primaryImage, "1차 읽기");
+  const preparedImage = await resizeImageDataUrl(imageDataUrl, 2800);
+  const passConfigs = [
+    { mode: "balanced", label: "1차 읽기" },
+    { mode: "strong", label: "2차 보정 읽기" },
+    { mode: "rescue", label: "3차 선명 읽기" },
+  ];
 
-  let bestCandidate = primaryCandidate;
-  let usedSecondPass = false;
+  let bestCandidate = null;
+  let passCount = 0;
 
-  if (isWeakOcrCandidate(primaryCandidate)) {
-    setStatus("1차 읽기가 약해서 선명 모드로 한 번 더 읽고 있어요.");
-    const boostedImage = await preprocessImageForOcr(preparedImage, { mode: "strong" });
-    const boostedCandidate = await runOcrPass(boostedImage, "2차 보정 읽기");
-    bestCandidate = pickBetterOcrCandidate(primaryCandidate, boostedCandidate);
-    usedSecondPass = true;
+  for (const config of passConfigs) {
+    if (bestCandidate && !isWeakOcrCandidate(bestCandidate)) break;
+    if (passCount > 0) {
+      setStatus(`${passCount + 1}차 읽기를 시도하고 있어요. 글자 경계를 더 또렷하게 보고 있어요.`);
+    }
+    const processedImage = await preprocessImageForOcr(preparedImage, { mode: config.mode });
+    const candidate = await runOcrPass(processedImage, config.label);
+    bestCandidate = bestCandidate ? pickBetterOcrCandidate(bestCandidate, candidate) : candidate;
+    passCount += 1;
   }
 
   state.lastOcrMeta = {
-    confidence: bestCandidate.confidence,
-    score: bestCandidate.score,
-    passLabel: bestCandidate.passLabel,
-    usedSecondPass,
+    confidence: bestCandidate?.confidence || 0,
+    score: bestCandidate?.score || 0,
+    passLabel: bestCandidate?.passLabel || "읽기 없음",
+    usedSecondPass: passCount > 1,
+    passCount,
   };
 
   return {
-    text: bestCandidate.text,
-    visibleProblemNumbers: bestCandidate.visibleProblemNumbers,
+    text: bestCandidate?.text || "",
+    visibleProblemNumbers: bestCandidate?.visibleProblemNumbers || [],
   };
 }
 
@@ -561,10 +699,13 @@ function preprocessImageForOcr(dataUrl, options = {}) {
           pixels[index] * 0.299 +
           pixels[index + 1] * 0.587 +
           pixels[index + 2] * 0.114;
-        const contrastFactor = mode === "strong" ? 1.9 : 1.45;
-        let adjusted = (grayscale - 128) * contrastFactor + 128;
+        const contrastFactor = mode === "rescue" ? 2.25 : mode === "strong" ? 1.9 : 1.45;
+        const brightnessBoost = mode === "rescue" ? 18 : mode === "strong" ? 12 : 6;
+        let adjusted = (grayscale - 128) * contrastFactor + 128 + brightnessBoost;
 
-        if (mode === "strong") {
+        if (mode === "rescue") {
+          adjusted = adjusted > 166 ? 255 : adjusted < 126 ? 0 : adjusted;
+        } else if (mode === "strong") {
           adjusted = adjusted > 150 ? 255 : adjusted < 118 ? 0 : adjusted;
         } else {
           adjusted = adjusted > 225 ? 255 : adjusted < 20 ? 0 : adjusted;
@@ -590,8 +731,8 @@ function resizeImageDataUrl(dataUrl, maxWidth) {
       let ratio = 1;
       if (image.width > maxWidth) {
         ratio = maxWidth / image.width;
-      } else if (image.width < 1500) {
-        ratio = Math.min(maxWidth / image.width, 1.35);
+      } else if (image.width < 1800) {
+        ratio = Math.min(maxWidth / image.width, 1.55);
       }
       const width = Math.round(image.width * ratio);
       const height = Math.round(image.height * ratio);
@@ -706,6 +847,10 @@ function normalizeProblemNumbers(items) {
   return unique;
 }
 
+function formatProblemLabel(problemNumber) {
+  return problemNumber ? `${problemNumber}번` : "문제 번호 미선택";
+}
+
 function extractVisibleProblemNumbers(text) {
   if (!text) return [];
   const patterns = [/^\s*(\d+)\s*[\.)]/gm, /^\s*(\d+)\s*번/gm, /\b(\d+)\s*\./g];
@@ -782,6 +927,48 @@ function extractProblemSegment(text, selectedNumber) {
   }
 
   return normalizeSentenceSpacing(text);
+}
+
+function calculateExcerptScore(text) {
+  const alphaCount = (String(text).match(/[A-Za-z]/g) || []).length;
+  const lineCount = String(text)
+    .split("\n")
+    .filter(Boolean).length;
+  const questionHint = /\b(what|who|where|when|how|color|many|blank|is|are|am)\b/i.test(text) ? 34 : 0;
+  return alphaCount * 1.8 + text.length * 0.7 + lineCount * 8 + questionHint;
+}
+
+function extractBestProblemExcerpt(text) {
+  if (!text) return "";
+
+  const lines = String(text)
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (!lines.length) return "";
+
+  const segments = [];
+  let current = [];
+
+  lines.forEach((line) => {
+    const startsNewProblem = Boolean(extractLeadingProblemNumber(line)) && current.length > 0;
+    if (startsNewProblem) {
+      segments.push(normalizeSentenceSpacing(current.join(" ")));
+      current = [line];
+      return;
+    }
+    current.push(line);
+  });
+
+  if (current.length) {
+    segments.push(normalizeSentenceSpacing(current.join(" ")));
+  }
+
+  const ranked = segments
+    .map((segment) => ({ segment, score: calculateExcerptScore(segment) }))
+    .sort((left, right) => right.score - left.score);
+
+  return ranked[0]?.segment || normalizeSentenceSpacing(lines.slice(0, 4).join(" "));
 }
 
 function inferFinalAnswer(problemText, summary) {
@@ -911,9 +1098,10 @@ function buildCoachingResponse(payload) {
 
   let sourceExcerpt = normalizeSentenceSpacing(payload.typedProblemText || "");
   if (payload.ocrText) {
-    sourceExcerpt =
-      extractProblemSegment(payload.ocrText, selectedProblemNumber) ||
-      normalizeSentenceSpacing(payload.ocrText);
+    sourceExcerpt = selectedProblemNumber
+      ? extractProblemSegment(payload.ocrText, selectedProblemNumber)
+      : extractBestProblemExcerpt(payload.ocrText);
+    sourceExcerpt = sourceExcerpt || normalizeSentenceSpacing(payload.ocrText);
   }
   if (!sourceExcerpt) {
     sourceExcerpt = "문장 인식 결과가 약해서 다시 찍거나 직접 입력이 필요해요.";
@@ -926,13 +1114,13 @@ function buildCoachingResponse(payload) {
     clarificationMessage = "사진에 여러 문제가 보여요. 몇 번 문제인지 한 번만 더 알려 주세요.";
   } else if (!selectedProblemNumber && recognized.length === 1) {
     selectedProblemNumber = recognized[0];
-  } else if (!selectedProblemNumber) {
-    selectedProblemNumber = "1";
   }
 
   const contextText = [sourceExcerpt, payload.ocrText || ""].filter(Boolean).join("\n").toLowerCase();
   let problemSummary = "문장 뜻을 이해하고 답을 찾는 문제";
-  let translation = `${selectedProblemNumber}번 문제는 영어 문장을 읽고 맞는 답을 찾는 연습이야.`;
+  let translation = selectedProblemNumber
+    ? `${selectedProblemNumber}번 문제는 영어 문장을 읽고 맞는 답을 찾는 연습이야.`
+    : "이 문제는 영어 문장을 읽고 맞는 답을 찾는 연습이야.";
   let thinkingPrompt = "문장에서 아는 단어를 먼저 찾고, 질문이 무엇을 묻는지 생각해 보자.";
   let hints = [
     { title: "힌트 1", body: "문장 속에서 아는 단어를 먼저 표시해 보자." },
@@ -1015,7 +1203,8 @@ function buildCoachingResponse(payload) {
 function renderResponse(response) {
   state.latestResponse = response;
   state.revealedHints = new Set();
-  elements.selectedProblemNumber.textContent = response.selectedProblemNumber ? `${response.selectedProblemNumber}번` : "선택 필요";
+  state.isFinalAnswerRevealed = false;
+  elements.selectedProblemNumber.textContent = formatProblemLabel(response.selectedProblemNumber);
   elements.problemSummary.textContent = response.problemSummary;
   elements.sourceExcerptText.textContent = response.sourceExcerpt;
   elements.translationText.textContent = response.translation;
@@ -1024,14 +1213,17 @@ function renderResponse(response) {
   resetAnswerCard(response);
   renderProblemChips(response);
   renderHints(response.hints);
+  setAnalysisPhase("ready");
 }
 
 function resetAnswerCard(response = state.latestResponse) {
-  elements.finalAnswerText.textContent = "정답과 풀이를 아직 열지 않았어요.";
+  state.isFinalAnswerRevealed = false;
+  elements.finalAnswerText.textContent = "힌트 3단계를 먼저 보면 마지막 단계가 열려요.";
   elements.finalExplanationText.textContent = response?.checkQuestion
-    ? `${response.checkQuestion} 힌트를 다 본 뒤 마지막 단계를 열어 주세요.`
-    : "힌트를 먼저 본 뒤 마지막 단계에서 정답과 풀이를 확인해 주세요.";
+    ? `${response.checkQuestion} 힌트 1, 2, 3을 모두 본 뒤 정답과 풀이를 열어 주세요.`
+    : "힌트 1, 2, 3을 모두 본 뒤 마지막 단계에서 정답과 풀이를 확인해 주세요.";
   elements.answerAudioButton.disabled = true;
+  updateFinalStepAvailability();
 }
 
 function buildOcrGuidance(response) {
@@ -1105,6 +1297,7 @@ function saveHistoryItem(entry) {
     manualProblemNumber: entry.manualProblemNumber,
     typedProblemText: entry.typedProblemText,
     ocrText: entry.ocrText,
+    lastOcrMeta: state.lastOcrMeta,
     response: entry.response,
   };
 
@@ -1144,16 +1337,35 @@ function renderHistory() {
   }
 
   state.historyItems.forEach((item) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "history-card";
-    button.innerHTML = `
+    const details = document.createElement("details");
+    details.className = "history-card";
+
+    const summary = document.createElement("summary");
+    summary.className = "history-summary";
+    summary.innerHTML = `
       <span class="meta">${formatSavedAt(item.savedAt)}</span>
-      <strong>${item.response?.selectedProblemNumber ? `${item.response.selectedProblemNumber}번` : "문제 번호 없음"} · ${item.response?.problemSummary || "문제 유형 없음"}</strong>
-      <p>${item.response?.sourceExcerpt || "읽은 문제 없음"}</p>
+      <strong>${formatProblemLabel(item.response?.selectedProblemNumber)} · ${item.response?.problemSummary || "문제 유형 없음"}</strong>
     `;
-    button.addEventListener("click", () => restoreHistoryItem(item));
-    elements.historyList.appendChild(button);
+
+    const body = document.createElement("div");
+    body.className = "history-details";
+
+    const excerpt = document.createElement("p");
+    excerpt.textContent = item.response?.sourceExcerpt || "읽은 문제 없음";
+
+    const restoreButton = document.createElement("button");
+    restoreButton.type = "button";
+    restoreButton.className = "pill secondary history-restore";
+    restoreButton.textContent = "이 기록 다시 열기";
+    restoreButton.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      restoreHistoryItem(item);
+    });
+
+    body.append(excerpt, restoreButton);
+    details.append(summary, body);
+    elements.historyList.appendChild(details);
   });
 }
 
@@ -1163,6 +1375,7 @@ function restoreHistoryItem(item) {
   elements.typedProblemText.value = item.typedProblemText || "";
   state.latestOcrText = item.ocrText || "";
   state.latestRecognizedNumbers = item.response?.recognizedProblemNumbers || [];
+  state.lastOcrMeta = item.lastOcrMeta || null;
   refreshFieldStates();
   renderResponse(item.response);
   setStatus("최근 기록을 다시 불러왔어요.");
@@ -1248,6 +1461,10 @@ function renderHints(hints) {
       button.disabled = true;
       button.textContent = "힌트 열림";
       audioButton.disabled = false;
+      updateFinalStepAvailability();
+      if (state.latestResponse && state.revealedHints.size === state.latestResponse.hints.length) {
+        setStatus("힌트 3단계를 모두 열었어요. 이제 마지막 단계에서 정답과 풀이를 확인할 수 있어요.");
+      }
     });
 
     audioButton.addEventListener("click", () => {
@@ -1263,6 +1480,41 @@ function renderHints(hints) {
   });
 }
 
+function setFinalStageState(mode) {
+  elements.finalStageCard.classList.remove("is-locked", "is-ready", "is-revealed");
+  elements.finalStageCard.classList.add(`is-${mode}`);
+}
+
+function updateFinalStepAvailability() {
+  if (!state.latestResponse) {
+    elements.revealAnswerButton.disabled = true;
+    elements.revealAnswerButton.textContent = "정답과 풀이 열기";
+    setFinalStageState("locked");
+    return;
+  }
+
+  if (state.isFinalAnswerRevealed) {
+    elements.revealAnswerButton.disabled = true;
+    elements.revealAnswerButton.textContent = "정답 확인 완료";
+    setFinalStageState("revealed");
+    return;
+  }
+
+  const totalHints = state.latestResponse.hints?.length || 0;
+  const remainingHints = Math.max(totalHints - state.revealedHints.size, 0);
+
+  if (remainingHints > 0) {
+    elements.revealAnswerButton.disabled = true;
+    elements.revealAnswerButton.textContent = `힌트 ${remainingHints}개 남음`;
+    setFinalStageState("locked");
+    return;
+  }
+
+  elements.revealAnswerButton.disabled = false;
+  elements.revealAnswerButton.textContent = "정답과 풀이 열기";
+  setFinalStageState("ready");
+}
+
 function revealFinalAnswer() {
   if (!state.latestResponse) {
     setStatus("먼저 문제를 분석해 주세요.");
@@ -1275,9 +1527,11 @@ function revealFinalAnswer() {
     return;
   }
 
-  elements.finalAnswerText.textContent = state.latestResponse.finalAnswer.answer;
+  state.isFinalAnswerRevealed = true;
+  elements.finalAnswerText.textContent = `정답: ${state.latestResponse.finalAnswer.answer}`;
   elements.finalExplanationText.textContent = state.latestResponse.finalAnswer.explanation;
   elements.answerAudioButton.disabled = false;
+  updateFinalStepAvailability();
   setStatus("이제 정답과 풀이를 열었어요. 먼저 아이가 스스로 답을 말해보게 해 주세요.");
 }
 

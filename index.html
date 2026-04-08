@@ -138,49 +138,77 @@
               <p class="panel-kicker">Focus</p>
               <h2>읽은 문제와 코칭 결과</h2>
             </div>
-            <span class="panel-pill" id="ocr-state-pill">OCR 대기 중</span>
           </div>
 
-          <div class="summary-grid">
-            <article class="summary-card">
-              <span>선택 문제</span>
-              <strong id="selected-problem-number">-</strong>
-            </article>
-            <article class="summary-card">
-              <span>문제 유형</span>
-              <strong id="problem-summary">아직 분석 전</strong>
-            </article>
+          <div class="analysis-phase-row" aria-label="코칭 상태">
+            <button class="phase-pill is-active" id="analysis-phase-idle" data-phase-step="idle" type="button">
+              코칭 시작 전
+            </button>
+            <button class="phase-pill" id="analysis-phase-processing" data-phase-step="processing" type="button">
+              진행 중
+            </button>
+            <button class="phase-pill" id="analysis-phase-ready" data-phase-step="ready" type="button">
+              완료
+            </button>
           </div>
 
-          <div class="number-list" id="problem-number-list"></div>
+          <button
+            class="detail-toggle"
+            id="result-details-toggle"
+            type="button"
+            aria-expanded="false"
+            aria-controls="result-details"
+          >
+            상세 내용
+          </button>
 
-          <article class="info-card">
-            <h3>읽은 문제</h3>
-            <p id="source-excerpt-text">
-              사진이나 직접 입력한 문제 문장이 여기에 보입니다.
-            </p>
-          </article>
+          <div class="result-details" id="result-details" hidden>
+            <div class="detail-meta-row">
+              <span class="panel-pill" id="ocr-state-pill">OCR 대기 중</span>
+              <span class="detail-note">필요할 때만 읽은 문제와 해석을 펼쳐서 확인해 주세요.</span>
+            </div>
 
-          <article class="info-card">
-            <h3>문제 뜻</h3>
-            <p id="translation-text">
-              분석이 끝나면 쉬운 한국어로 문제 뜻을 알려줍니다.
-            </p>
-          </article>
+            <div class="summary-grid">
+              <article class="summary-card">
+                <span>선택 문제</span>
+                <strong id="selected-problem-number">-</strong>
+              </article>
+              <article class="summary-card">
+                <span>문제 유형</span>
+                <strong id="problem-summary">아직 분석 전</strong>
+              </article>
+            </div>
 
-          <article class="info-card highlight">
-            <h3>먼저 생각해볼 점</h3>
-            <p id="thinking-prompt-text">
-              정답 대신 먼저 봐야 할 단서를 알려줍니다.
-            </p>
-          </article>
+            <div class="number-list" id="problem-number-list"></div>
 
-          <article class="info-card">
-            <h3>OCR 전체 읽기</h3>
-            <p id="ocr-text-full">
-              아직 OCR 결과가 없습니다.
-            </p>
-          </article>
+            <article class="info-card">
+              <h3>읽은 문제</h3>
+              <p id="source-excerpt-text">
+                사진이나 직접 입력한 문제 문장이 여기에 보입니다.
+              </p>
+            </article>
+
+            <article class="info-card">
+              <h3>문제 뜻</h3>
+              <p id="translation-text">
+                분석이 끝나면 쉬운 한국어로 문제 뜻을 알려줍니다.
+              </p>
+            </article>
+
+            <article class="info-card highlight">
+              <h3>먼저 생각해볼 점</h3>
+              <p id="thinking-prompt-text">
+                정답 대신 먼저 봐야 할 단서를 알려줍니다.
+              </p>
+            </article>
+
+            <article class="info-card">
+              <h3>OCR 전체 읽기</h3>
+              <p id="ocr-text-full">
+                아직 OCR 결과가 없습니다.
+              </p>
+            </article>
+          </div>
         </section>
 
         <section class="panel">
@@ -193,22 +221,22 @@
 
           <div class="hint-grid" id="hints-grid"></div>
 
-          <div class="answer-card">
+          <div class="answer-card is-locked" id="final-stage-card">
             <div class="answer-head">
               <div>
-                <p class="answer-label">마지막 단계</p>
-                <strong id="final-answer-text">정답과 풀이를 아직 열지 않았어요.</strong>
+                <p class="answer-label">마지막 단계 · 정답과 풀이</p>
+                <strong id="final-answer-text">힌트 3단계를 먼저 보면 마지막 단계가 열려요.</strong>
               </div>
               <button class="pill subtle compact" id="answer-audio-button" type="button">
                 자동 읽기
               </button>
             </div>
             <p id="final-explanation-text">
-              힌트를 먼저 본 뒤 마지막 단계에서 정답과 풀이를 확인해 주세요.
+              힌트 1, 2, 3을 모두 본 뒤 마지막 단계에서 정답과 풀이를 확인해 주세요.
             </p>
             <div class="answer-actions">
               <button class="pill secondary" id="reveal-answer-button" type="button">
-                마지막 단계 열기
+                정답과 풀이 열기
               </button>
             </div>
           </div>
@@ -220,7 +248,6 @@
               <p class="panel-kicker">Share</p>
               <h2>ChatGPT 보조</h2>
             </div>
-            <span class="panel-caption">힌트 카드와 마지막 단계 카드에서 자동 읽기를 사용할 수 있어요.</span>
           </div>
 
           <div class="utility-row">
@@ -251,7 +278,7 @@
           <div class="history-list" id="history-list">
             <article class="history-card empty">
               <strong>아직 저장된 기록이 없어요.</strong>
-              <p>문제를 한 번 분석하면 최근 기록이 여기에 쌓입니다.</p>
+              <p>문제를 한 번 분석하면 필요한 경우에만 펼쳐볼 수 있는 기록이 여기에 쌓입니다.</p>
             </article>
           </div>
         </section>
@@ -274,7 +301,7 @@
           <video id="camera-preview" autoplay playsinline muted></video>
           <div class="camera-overlay-guide">
             <strong>한 문제만 크게 보이게 맞춰 주세요.</strong>
-            <span>문제 번호와 문장이 함께 보이면 OCR이 더 안정적이에요.</span>
+            <span>문제 번호와 문장이 함께 보이게 하고, 글자가 흐리면 한 걸음 더 가까이 와서 촬영해 주세요.</span>
           </div>
         </div>
 
