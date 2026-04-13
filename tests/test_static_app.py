@@ -39,6 +39,9 @@ class StaticAppTest(unittest.TestCase):
         for required_id in [
             "camera-overlay",
             "close-camera-button",
+            "chatgpt-child-mode-button",
+            "chatgpt-parent-mode-button",
+            "chatgpt-mode-description",
             "share-chatgpt-prompt-button",
             "copy-chatgpt-prompt-button",
             "result-details-toggle",

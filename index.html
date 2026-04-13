@@ -250,12 +250,37 @@
             </div>
           </div>
 
+          <div class="prompt-mode-row" id="chatgpt-mode-toggle" role="group" aria-label="ChatGPT 보조 모드">
+            <button
+              class="mode-chip is-selected"
+              id="chatgpt-child-mode-button"
+              data-chatgpt-mode="child-deep"
+              type="button"
+              aria-pressed="true"
+            >
+              아이용 깊은 풀이
+            </button>
+            <button
+              class="mode-chip"
+              id="chatgpt-parent-mode-button"
+              data-chatgpt-mode="parent-summary"
+              type="button"
+              aria-pressed="false"
+            >
+              부모용 요약
+            </button>
+          </div>
+
+          <p class="panel-caption" id="chatgpt-mode-description">
+            아이에게 힌트 3개를 먼저 주는 설명을 복사하거나 공유할 수 있어요.
+          </p>
+
           <div class="utility-row">
             <button class="pill secondary" id="copy-chatgpt-prompt-button" type="button">
-              ChatGPT 복사
+              아이용 복사
             </button>
             <button class="pill subtle" id="share-chatgpt-prompt-button" type="button">
-              공유하기
+              아이용 공유
             </button>
           </div>
 

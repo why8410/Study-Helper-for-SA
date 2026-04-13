@@ -14,6 +14,7 @@ const state = {
   preferredVoice: null,
   installPromptEvent: null,
   analysisPhase: "idle",
+  chatGptPromptMode: "child-deep",
 };
 
 const elements = {
@@ -51,11 +52,32 @@ const elements = {
   answerAudioButton: document.getElementById("answer-audio-button"),
   finalAnswerText: document.getElementById("final-answer-text"),
   finalExplanationText: document.getElementById("final-explanation-text"),
+  chatgptModeButtons: Array.from(document.querySelectorAll("[data-chatgpt-mode]")),
+  chatgptModeDescription: document.getElementById("chatgpt-mode-description"),
   copyChatgptPromptButton: document.getElementById("copy-chatgpt-prompt-button"),
   shareChatgptPromptButton: document.getElementById("share-chatgpt-prompt-button"),
   speechStatusText: document.getElementById("speech-status-text"),
   historyList: document.getElementById("history-list"),
   clearHistoryButton: document.getElementById("clear-history-button"),
+};
+
+const CHATGPT_MODE_META = {
+  "child-deep": {
+    copyLabel: "아이용 복사",
+    shareLabel: "아이용 공유",
+    readyText: "아이에게 힌트 3개를 먼저 주는 설명을 복사하거나 공유할 수 있어요.",
+    emptyStatus: "먼저 문제를 분석한 뒤에 아이용 깊은 풀이 질문을 복사할 수 있어요.",
+    copiedStatus: "아이용 깊은 풀이 질문을 복사했어요.",
+    sharedStatus: "아이용 깊은 풀이 질문을 공유했어요.",
+  },
+  "parent-summary": {
+    copyLabel: "부모 요약 복사",
+    shareLabel: "부모 요약 공유",
+    readyText: "부모가 아이를 도와줄 때 바로 참고할 수 있는 요약을 복사하거나 공유할 수 있어요.",
+    emptyStatus: "먼저 문제를 분석한 뒤에 부모용 요약 질문을 복사할 수 있어요.",
+    copiedStatus: "부모용 요약 질문을 복사했어요.",
+    sharedStatus: "부모용 요약 질문을 공유했어요.",
+  },
 };
 
 function init() {
@@ -72,6 +94,7 @@ function init() {
   setAnalysisPhase("idle");
   toggleResultDetails(false);
   resetResultPanel();
+  setChatGptPromptMode(state.chatGptPromptMode);
 }
 
 function bindEvents() {
@@ -85,6 +108,11 @@ function bindEvents() {
   elements.answerAudioButton.addEventListener("click", playFinalAnswerAudio);
   elements.copyChatgptPromptButton.addEventListener("click", copyChatGptPrompt);
   elements.shareChatgptPromptButton.addEventListener("click", shareChatGptPrompt);
+  elements.chatgptModeButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      setChatGptPromptMode(button.dataset.chatgptMode || "child-deep");
+    });
+  });
   elements.clearHistoryButton.addEventListener("click", clearHistory);
   elements.installButton.addEventListener("click", installApp);
   elements.resultDetailsToggle.addEventListener("click", () => {
@@ -127,6 +155,26 @@ function setStatus(message) {
 
 function setSpeechStatus(message) {
   elements.speechStatusText.textContent = message;
+}
+
+function getChatGptModeMeta(mode = state.chatGptPromptMode) {
+  return CHATGPT_MODE_META[mode] || CHATGPT_MODE_META["child-deep"];
+}
+
+function setChatGptPromptMode(mode) {
+  const nextMode = CHATGPT_MODE_META[mode] ? mode : "child-deep";
+  const modeMeta = getChatGptModeMeta(nextMode);
+  state.chatGptPromptMode = nextMode;
+
+  elements.chatgptModeButtons.forEach((button) => {
+    const isSelected = button.dataset.chatgptMode === nextMode;
+    button.classList.toggle("is-selected", isSelected);
+    button.setAttribute("aria-pressed", String(isSelected));
+  });
+
+  elements.chatgptModeDescription.textContent = modeMeta.readyText;
+  elements.copyChatgptPromptButton.textContent = modeMeta.copyLabel;
+  elements.shareChatgptPromptButton.textContent = modeMeta.shareLabel;
 }
 
 function setOcrState(message) {
@@ -1538,8 +1586,9 @@ function revealFinalAnswer() {
 function buildChatGptPrompt(mode = "child-deep") {
   const response = state.latestResponse;
   if (!response) return "";
+  const promptMode = CHATGPT_MODE_META[mode] ? mode : "child-deep";
 
-  if (mode === "parent-summary") {
+  if (promptMode === "parent-summary") {
     return [
       "초등학교 2학년 아이를 돕는 부모에게 설명하듯 답해줘.",
       "요청: 아이에게 바로 정답을 말하지 않도록 지도하는 방식으로 설명해줘.",
@@ -1567,15 +1616,16 @@ function buildChatGptPrompt(mode = "child-deep") {
 }
 
 async function copyChatGptPrompt() {
-  const text = buildChatGptPrompt("child-deep");
+  const modeMeta = getChatGptModeMeta();
+  const text = buildChatGptPrompt(state.chatGptPromptMode);
   if (!text) {
-    setStatus("먼저 문제를 분석한 뒤에 ChatGPT 질문을 복사할 수 있어요.");
+    setStatus(modeMeta.emptyStatus);
     return;
   }
 
   try {
     await navigator.clipboard.writeText(text);
-    setStatus("ChatGPT용 질문을 복사했어요.");
+    setStatus(modeMeta.copiedStatus);
   } catch (error) {
     const textarea = document.createElement("textarea");
     textarea.value = text;
@@ -1583,14 +1633,15 @@ async function copyChatGptPrompt() {
     textarea.select();
     document.execCommand("copy");
     textarea.remove();
-    setStatus("ChatGPT용 질문을 복사했어요.");
+    setStatus(modeMeta.copiedStatus);
   }
 }
 
 async function shareChatGptPrompt() {
-  const text = buildChatGptPrompt("child-deep");
+  const modeMeta = getChatGptModeMeta();
+  const text = buildChatGptPrompt(state.chatGptPromptMode);
   if (!text) {
-    setStatus("먼저 문제를 분석한 뒤에 공유할 수 있어요.");
+    setStatus(modeMeta.emptyStatus);
     return;
   }
 
@@ -1600,7 +1651,7 @@ async function shareChatGptPrompt() {
         title: "Study Helper for SA",
         text,
       });
-      setStatus("ChatGPT용 질문을 공유했어요.");
+      setStatus(modeMeta.sharedStatus);
       return;
     } catch (error) {
       if (error?.name === "AbortError") {
