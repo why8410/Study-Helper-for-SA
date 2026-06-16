@@ -10,15 +10,34 @@
 
 기획, 설계, 진행 기록은 `project-materials/` 폴더를 보면 됩니다.
 
-## GitHub 배포
+## 배포 (중요)
+
+**기본 배포 경로는 GitHub Pages 자동 배포 하나로 통일합니다.**
 
 - GitHub 저장소: `https://github.com/why8410/Study-Helper-for-SA`
 - GitHub Actions 기반 Pages 배포 워크플로: `.github/workflows/deploy-pages.yml`
+- `main` 브랜치에 push 하면 검증(`verify_static_app.py` + 테스트) 통과 후 자동 배포됩니다.
 - GitHub Pages 프로젝트 주소 형식:
   - `https://why8410.github.io/Study-Helper-for-SA/`
 
 이 저장소는 GitHub Pages 하위 경로에서도 열리도록
 상대 경로와 서비스 워커 등록 경로를 맞춰두었습니다.
+
+### 스테일(옛 화면) 방지
+
+- `sw.js` 는 화면(HTML)과 `app.js`/`styles.css` 를 **항상 최신으로 먼저** 받아옵니다(network-first).
+- 빌드할 때 `sw.js` 의 캐시 버전이 **커밋해시/타임스탬프로 자동 교체**되어, 새 배포가 옛 캐시에 묶이지 않습니다.
+- 새 버전이 감지되면 앱 하단에 **"새로고침" 안내 토스트**가 떠서 한 번에 최신화할 수 있습니다.
+
+### Netlify 등 다른 호스팅(선택)
+
+- `netlify.toml` 은 Netlify 로 올릴 때만 적용되는 보조 설정입니다.
+  GitHub Pages 에서는 적용되지 않으므로, 캐시 무효화는 위의 `sw.js` 로직이 담당합니다.
+
+### `.command` 스크립트는 로컬 미리보기 전용
+
+- `Start/Stop-*.command` 는 이 PC에서 미리보기만 띄웁니다(배포 아님).
+- `Build-*.command` 는 배포용 묶음(zip)을 만들 뿐, 실제 공개는 위 GitHub Pages 자동 배포로 합니다.
 
 ## 이 버전의 핵심
 
@@ -65,8 +84,9 @@
 - `styles.css`: 모바일 우선 UI 스타일
 - `app.js`: 카메라, OCR, 힌트, 음성, 공유, 최근 기록 로직
 - `manifest.webmanifest`: PWA 설치 정보
-- `sw.js`: 오프라인 캐시용 서비스 워커
-- `netlify.toml`: 무료 정적 배포용 기본 설정
+- `sw.js`: 오프라인 캐시 + 최신 배포 우선(network-first) 서비스 워커
+- `vendor/tesseract.min.js`: 글자 읽기(OCR) 라이브러리 로컬 사본(첫 로딩·오프라인 개선)
+- `netlify.toml`: (선택) Netlify 로 올릴 때만 쓰는 보조 설정
 - `favicon.svg`: 앱 아이콘
 - `Start-Study-Helper-for-SA-Tablet.command`: 로컬 미리보기 실행
 - `Stop-Study-Helper-for-SA-Tablet.command`: 로컬 미리보기 종료

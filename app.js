@@ -59,6 +59,8 @@ const elements = {
   speechStatusText: document.getElementById("speech-status-text"),
   historyList: document.getElementById("history-list"),
   clearHistoryButton: document.getElementById("clear-history-button"),
+  audienceToggle: document.getElementById("audience-toggle"),
+  deepHelpButton: document.getElementById("deep-help-button"),
 };
 
 const CHATGPT_MODE_META = {
@@ -90,11 +92,24 @@ function init() {
   refreshFieldStates();
   renderHistory();
   updateAppMode();
+  // tesseract 로드가 늦거나 실패할 수 있으니 로드 완료 시점에 배지를 다시 확인한다.
+  window.addEventListener("load", updateAppMode);
   updateCaptureButtonLabel();
   setAnalysisPhase("idle");
   toggleResultDetails(false);
   resetResultPanel();
   setChatGptPromptMode(state.chatGptPromptMode);
+  setAudienceMode("child");
+}
+
+function setAudienceMode(mode) {
+  const isParent = mode === "parent";
+  document.body.classList.toggle("mode-parent", isParent);
+  document.body.classList.toggle("mode-child", !isParent);
+  if (elements.audienceToggle) {
+    elements.audienceToggle.textContent = isParent ? "아이 화면 보기" : "부모 화면 보기";
+    elements.audienceToggle.setAttribute("aria-pressed", String(isParent));
+  }
 }
 
 function bindEvents() {
@@ -115,6 +130,14 @@ function bindEvents() {
   });
   elements.clearHistoryButton.addEventListener("click", clearHistory);
   elements.installButton.addEventListener("click", installApp);
+  if (elements.audienceToggle) {
+    elements.audienceToggle.addEventListener("click", () => {
+      setAudienceMode(document.body.classList.contains("mode-parent") ? "child" : "parent");
+    });
+  }
+  if (elements.deepHelpButton) {
+    elements.deepHelpButton.addEventListener("click", copyChatGptPrompt);
+  }
   elements.resultDetailsToggle.addEventListener("click", () => {
     toggleResultDetails(elements.resultDetails.hidden);
   });
@@ -146,7 +169,8 @@ function bindEvents() {
 
 function updateAppMode() {
   const hasTesseract = Boolean(window.Tesseract);
-  elements.appModeBadge.textContent = hasTesseract ? "로컬 OCR 모드" : "OCR 준비 중";
+  elements.appModeBadge.textContent = hasTesseract ? "글자 읽기 켜짐" : "글자 읽기 준비 중";
+  elements.appModeBadge.classList.toggle("strong", hasTesseract);
 }
 
 function setStatus(message) {
@@ -202,15 +226,15 @@ function resetResultPanel() {
   state.isFinalAnswerRevealed = false;
   toggleResultDetails(false);
   elements.selectedProblemNumber.textContent = "-";
-  elements.problemSummary.textContent = "아직 분석 전";
-  elements.sourceExcerptText.textContent = "사진이나 직접 입력한 문제 문장이 여기에 보입니다.";
-  elements.translationText.textContent = "분석이 끝나면 쉬운 한국어로 문제 뜻을 알려줍니다.";
-  elements.thinkingPromptText.textContent = "정답 대신 먼저 봐야 할 단서를 알려줍니다.";
-  elements.ocrTextFull.textContent = "아직 OCR 결과가 없습니다.";
+  elements.problemSummary.textContent = "아직 안 했어요";
+  elements.sourceExcerptText.textContent = "사진이나 직접 적은 문제 문장이 여기에 보여요.";
+  elements.translationText.textContent = "다 끝나면 쉬운 우리말로 문제 뜻을 알려줘요.";
+  elements.thinkingPromptText.textContent = "정답 대신 먼저 봐야 할 단서를 알려줘요.";
+  elements.ocrTextFull.textContent = "아직 읽은 글자가 없어요.";
   renderProblemChips({ recognizedProblemNumbers: [] });
   renderEmptyHints();
   resetAnswerCard();
-  setOcrState("OCR 대기 중");
+  setOcrState("글자 읽기 대기 중");
   setAnalysisPhase("idle");
 }
 
@@ -362,7 +386,66 @@ function registerServiceWorker() {
   const serviceWorkerUrl = new URL("sw.js", appBaseUrl);
   navigator.serviceWorker
     .register(serviceWorkerUrl.href, { scope: appBaseUrl.pathname })
+    .then((registration) => {
+      // 이미 대기 중인 새 버전이 있으면 바로 안내.
+      if (registration.waiting && navigator.serviceWorker.controller) {
+        showUpdateToast(registration.waiting);
+      }
+      registration.addEventListener("updatefound", () => {
+        const installing = registration.installing;
+        if (!installing) return;
+        installing.addEventListener("statechange", () => {
+          if (installing.state === "installed" && navigator.serviceWorker.controller) {
+            showUpdateToast(installing);
+          }
+        });
+      });
+    })
     .catch(() => {});
+
+  // "지금 적용"으로 새 SW가 제어를 가져오면 한 번만 새로고침.
+  let hasReloaded = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (hasReloaded) return;
+    hasReloaded = true;
+    window.location.reload();
+  });
+}
+
+function showUpdateToast(worker) {
+  if (document.getElementById("update-toast")) return;
+
+  const toast = document.createElement("div");
+  toast.id = "update-toast";
+  toast.className = "update-toast";
+  toast.setAttribute("role", "status");
+  toast.setAttribute("aria-live", "polite");
+
+  const message = document.createElement("span");
+  message.className = "update-toast-text";
+  message.textContent = "새 버전이 있어요. 새로고침하면 최신 화면으로 바뀌어요.";
+
+  const reloadButton = document.createElement("button");
+  reloadButton.type = "button";
+  reloadButton.className = "pill primary compact";
+  reloadButton.textContent = "새로고침";
+  reloadButton.addEventListener("click", () => {
+    if (worker) {
+      // 대기 중 새 SW를 즉시 활성화 → controllerchange 에서 새로고침.
+      worker.postMessage("SKIP_WAITING");
+    } else {
+      window.location.reload();
+    }
+  });
+
+  const laterButton = document.createElement("button");
+  laterButton.type = "button";
+  laterButton.className = "pill subtle compact";
+  laterButton.textContent = "나중에";
+  laterButton.addEventListener("click", () => toast.remove());
+
+  toast.append(message, reloadButton, laterButton);
+  document.body.appendChild(toast);
 }
 
 async function startCamera() {
@@ -594,6 +677,11 @@ function speakText(text) {
   const cleaned = String(text || "").trim();
   if (!cleaned) return;
 
+  // 보이스 목록이 늦게 채워지는 브라우저가 있어 재생 직전에 다시 고른다.
+  if (!state.preferredVoice) {
+    loadSpeechVoices();
+  }
+
   window.speechSynthesis.cancel();
   const utterance = new SpeechSynthesisUtterance(cleaned);
   utterance.lang = state.preferredVoice?.lang || "ko-KR";
@@ -621,7 +709,7 @@ function playFinalAnswerAudio() {
       state.latestResponse.selectedProblemNumber
         ? `${state.latestResponse.selectedProblemNumber}번 문제 마지막 단계야.`
         : "마지막 단계 풀이를 읽어줄게.",
-      `정답은 ${state.latestResponse.finalAnswer.answer}.`,
+      `답은 보통 ${state.latestResponse.finalAnswer.answer}일 가능성이 높아.`,
       state.latestResponse.finalAnswer.explanation,
     ]
       .filter(Boolean)
@@ -649,14 +737,14 @@ async function runAnalysis(options = {}) {
 
   try {
     if (state.latestImageDataUrl && (!reuseOcr || !ocrText)) {
-      setStatus("이미지에서 글자를 읽는 중이에요. 태블릿에서 잠깐만 기다려 주세요.");
-      setOcrState("OCR 분석 중");
+      setStatus("사진에서 글자를 읽는 중이에요. 태블릿에서 잠깐만 기다려 주세요.");
+      setOcrState("글자 읽는 중");
       const ocrResult = await runClientSideOcr(state.latestImageDataUrl);
       ocrText = ocrResult.text;
       recognizedProblemNumbers = ocrResult.visibleProblemNumbers;
       state.latestOcrText = ocrText;
       state.latestRecognizedNumbers = recognizedProblemNumbers;
-      setOcrState(ocrText ? "OCR 읽기 완료" : "OCR 결과 약함");
+      setOcrState(ocrText ? "글자 읽기 끝" : "글자가 잘 안 보여요");
     }
 
     const payload = {
@@ -679,8 +767,8 @@ async function runAnalysis(options = {}) {
 
     setStatus(buildReadyStatus(response));
   } catch (error) {
-    setStatus(error.message || "이미지 분석 중 문제가 생겼어요.");
-    setOcrState("OCR 실패");
+    setStatus(error.message || "사진을 살펴보는 중에 문제가 생겼어요.");
+    setOcrState("글자 읽기 실패");
     setAnalysisPhase(state.latestResponse ? "ready" : "idle");
   } finally {
     elements.analyzeButton.disabled = false;
@@ -689,10 +777,12 @@ async function runAnalysis(options = {}) {
 
 async function runClientSideOcr(imageDataUrl) {
   if (!window.Tesseract) {
-    throw new Error("OCR 라이브러리를 아직 불러오지 못했어요. 인터넷 연결을 확인해 주세요.");
+    throw new Error("글자 읽기 기능을 아직 불러오지 못했어요. 인터넷 연결을 확인해 주세요.");
   }
 
-  const preparedImage = await resizeImageDataUrl(imageDataUrl, 2800);
+  const resizedImage = await resizeImageDataUrl(imageDataUrl, 2800);
+  // 기울어진 사진은 글자 인식이 떨어지므로 살짝 기운 각도를 자동 보정한다.
+  const preparedImage = await autoDeskewImageDataUrl(resizedImage).catch(() => resizedImage);
   const passConfigs = [
     { mode: "balanced", label: "1차 읽기" },
     { mode: "strong", label: "2차 보정 읽기" },
@@ -770,6 +860,114 @@ function preprocessImageForOcr(dataUrl, options = {}) {
     image.onerror = () => reject(new Error("OCR 전처리용 이미지를 읽지 못했어요."));
     image.src = dataUrl;
   });
+}
+
+// 작은 추정용 캔버스에서 -6~+6도 사이의 기울기를 가늠해 가장 행 정렬이 잘 되는 각도를 찾는다.
+function estimateSkewAngle(dataUrl) {
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.onload = () => {
+      try {
+        const maxWidth = 600;
+        const scale = image.width > maxWidth ? maxWidth / image.width : 1;
+        const width = Math.max(1, Math.round(image.width * scale));
+        const height = Math.max(1, Math.round(image.height * scale));
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(image, 0, 0, width, height);
+
+        const pixels = ctx.getImageData(0, 0, width, height).data;
+        const luminance = new Float32Array(width * height);
+        for (let i = 0, p = 0; i < pixels.length; i += 4, p += 1) {
+          luminance[p] = pixels[i] * 0.299 + pixels[i + 1] * 0.587 + pixels[i + 2] * 0.114;
+        }
+
+        let bestAngle = 0;
+        let bestScore = -1;
+        for (let deg = -6; deg <= 6; deg += 1) {
+          const score = projectionVarianceAtAngle(luminance, width, height, deg);
+          if (score > bestScore) {
+            bestScore = score;
+            bestAngle = deg;
+          }
+        }
+        resolve(bestAngle);
+      } catch (error) {
+        resolve(0);
+      }
+    };
+    image.onerror = () => resolve(0);
+    image.src = dataUrl;
+  });
+}
+
+function projectionVarianceAtAngle(luminance, width, height, deg) {
+  const radians = (deg * Math.PI) / 180;
+  const sin = Math.sin(radians);
+  const cos = Math.cos(radians);
+  const centerX = width / 2;
+  const centerY = height / 2;
+  const rowSums = new Float64Array(height);
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const darkness = 255 - luminance[y * width + x];
+      if (darkness < 60) continue;
+      const rotatedY = Math.round((x - centerX) * sin + (y - centerY) * cos + centerY);
+      if (rotatedY >= 0 && rotatedY < height) rowSums[rotatedY] += darkness;
+    }
+  }
+
+  let mean = 0;
+  for (let i = 0; i < height; i += 1) mean += rowSums[i];
+  mean /= height || 1;
+
+  let variance = 0;
+  for (let i = 0; i < height; i += 1) {
+    const diff = rowSums[i] - mean;
+    variance += diff * diff;
+  }
+  return variance / (height || 1);
+}
+
+function rotateImageDataUrl(dataUrl, deg) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => {
+      const radians = (deg * Math.PI) / 180;
+      const width = image.width;
+      const height = image.height;
+      const absCos = Math.abs(Math.cos(radians));
+      const absSin = Math.abs(Math.sin(radians));
+      const newWidth = Math.round(width * absCos + height * absSin);
+      const newHeight = Math.round(width * absSin + height * absCos);
+      const canvas = document.createElement("canvas");
+      canvas.width = newWidth;
+      canvas.height = newHeight;
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, newWidth, newHeight);
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.translate(newWidth / 2, newHeight / 2);
+      ctx.rotate(radians);
+      ctx.drawImage(image, -width / 2, -height / 2);
+      resolve(canvas.toDataURL("image/png"));
+    };
+    image.onerror = () => reject(new Error("이미지 회전에 실패했어요."));
+    image.src = dataUrl;
+  });
+}
+
+async function autoDeskewImageDataUrl(dataUrl) {
+  const angle = await estimateSkewAngle(dataUrl);
+  // 1도 미만은 잡음으로 보고 두지 않는다(과보정 방지).
+  if (!angle || Math.abs(angle) < 1 || Math.abs(angle) > 6) return dataUrl;
+  return rotateImageDataUrl(dataUrl, angle);
 }
 
 function resizeImageDataUrl(dataUrl, maxWidth) {
@@ -1070,7 +1268,7 @@ function buildDetailedFinalAnswer(sourceExcerpt, problemSummary, translation, th
         translation,
         thinkingPrompt,
         inferred.explanation,
-        `그래서 마지막 답은 ${inferred.answer}로 정리할 수 있어.`,
+        `그래서 답은 보통 "${inferred.answer}"일 가능성이 높아. 그림이나 문장을 보고 한 번 더 확인해 보자.`,
       ]
         .filter(Boolean)
         .join(" "),
@@ -1164,7 +1362,15 @@ function buildCoachingResponse(payload) {
     selectedProblemNumber = recognized[0];
   }
 
-  const contextText = [sourceExcerpt, payload.ocrText || ""].filter(Boolean).join("\n").toLowerCase();
+  // 번호 미선택 + 여러 문제 인식: 임의 발췌 대신 번호 선택을 먼저 유도한다.
+  if (needsProblemNumberClarification) {
+    sourceExcerpt = "여러 문제가 함께 보여요. 위에서 몇 번 문제인지 먼저 골라 주세요.";
+  }
+
+  const contextText = [payload.ocrText || "", needsProblemNumberClarification ? "" : sourceExcerpt]
+    .filter(Boolean)
+    .join("\n")
+    .toLowerCase();
   let problemSummary = "문장 뜻을 이해하고 답을 찾는 문제";
   let translation = selectedProblemNumber
     ? `${selectedProblemNumber}번 문제는 영어 문장을 읽고 맞는 답을 찾는 연습이야.`
@@ -1197,7 +1403,7 @@ function buildCoachingResponse(payload) {
       { title: "힌트 3", body: "그 대상이 몇 개인지 그림이나 문장 단서를 다시 보자." },
     ];
     checkQuestion = "몇 개라고 하면 자연스러울까?";
-  } else if (contextText.includes("blank") || contextText.includes("fill in") || /_+/.test(sourceExcerpt + payload.ocrText)) {
+  } else if (contextText.includes("blank") || contextText.includes("fill in") || /_+/.test(sourceExcerpt + (payload.ocrText || ""))) {
     problemSummary = "빈칸에 들어갈 알맞은 단어를 찾는 문제";
     translation = "빈칸 앞뒤 뜻을 보고 어떤 말이 가장 자연스러운지 찾는 문제야.";
     thinkingPrompt = "빈칸 앞 단어와 뒤 단어를 같이 읽어 보자.";
@@ -1221,14 +1427,32 @@ function buildCoachingResponse(payload) {
     problemSummary = "사람을 묻는 문제";
     translation = "`who`는 누구인지 물을 때 쓰는 말이야.";
     thinkingPrompt = "사람 이름이나 사람을 가리키는 말을 먼저 찾아보자.";
+    hints = [
+      { title: "힌트 1", body: "`who`가 보이면 사람을 찾는 문제라는 뜻이야." },
+      { title: "힌트 2", body: "문장 안에서 사람 이름이나 가족, 친구처럼 사람을 가리키는 말을 찾아보자." },
+      { title: "힌트 3", body: "그중에서 질문이 가리키는 사람을 골라 보자." },
+    ];
+    checkQuestion = "누구를 답으로 말하면 가장 잘 맞을까?";
   } else if (contextText.includes("where")) {
     problemSummary = "장소를 묻는 문제";
     translation = "`where`는 어디인지 묻는 문제야.";
     thinkingPrompt = "장소 이름이 나올 만한 단어를 먼저 찾아보자.";
+    hints = [
+      { title: "힌트 1", body: "`where`가 보이면 어디인지 찾는 문제야." },
+      { title: "힌트 2", body: "학교, 집, 공원처럼 장소를 가리키는 말을 문장에서 찾아보자." },
+      { title: "힌트 3", body: "질문에 가장 잘 어울리는 장소를 골라 보자." },
+    ];
+    checkQuestion = "어떤 장소가 답으로 가장 잘 맞을까?";
   } else if (contextText.includes("what")) {
     problemSummary = "무엇인지 묻는 문제";
     translation = "`what`은 무엇인지 물을 때 쓰는 말이야.";
     thinkingPrompt = "질문이 무엇을 알고 싶은지 먼저 찾아보자.";
+    hints = [
+      { title: "힌트 1", body: "`what`이 보이면 무엇인지 찾는 문제야." },
+      { title: "힌트 2", body: "질문 바로 뒤에 나오는 말을 보고 무엇을 묻는지 생각해 보자." },
+      { title: "힌트 3", body: "문장 속 핵심 낱말 중에서 답을 골라 보자." },
+    ];
+    checkQuestion = "무엇이라고 답하면 가장 자연스러울까?";
   }
 
   const finalAnswer = buildDetailedFinalAnswer(sourceExcerpt, problemSummary, translation, thinkingPrompt);
@@ -1257,7 +1481,7 @@ function renderResponse(response) {
   elements.sourceExcerptText.textContent = response.sourceExcerpt;
   elements.translationText.textContent = response.translation;
   elements.thinkingPromptText.textContent = response.thinkingPrompt;
-  elements.ocrTextFull.textContent = state.latestOcrText || "이번에는 OCR 없이 입력한 문제를 기준으로 코칭했어요.";
+  elements.ocrTextFull.textContent = state.latestOcrText || "이번에는 사진 없이 직접 적은 문제를 기준으로 도와줬어요.";
   resetAnswerCard(response);
   renderProblemChips(response);
   renderHints(response.hints);
@@ -1576,7 +1800,7 @@ function revealFinalAnswer() {
   }
 
   state.isFinalAnswerRevealed = true;
-  elements.finalAnswerText.textContent = `정답: ${state.latestResponse.finalAnswer.answer}`;
+  elements.finalAnswerText.textContent = `이 문제에서는 보통 "${state.latestResponse.finalAnswer.answer}" 예요`;
   elements.finalExplanationText.textContent = state.latestResponse.finalAnswer.explanation;
   elements.answerAudioButton.disabled = false;
   updateFinalStepAvailability();

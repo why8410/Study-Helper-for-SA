@@ -1,5 +1,8 @@
+from datetime import datetime, timezone
 from pathlib import Path
+import re
 import shutil
+import subprocess
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -14,16 +17,56 @@ FILES_TO_COPY = [
     "favicon.svg",
     "README.md",
     "netlify.toml",
+    "vendor/tesseract.min.js",
 ]
+
+
+def resolve_cache_version() -> str:
+    """배포마다 유일한 캐시 버전을 만든다(커밋해시 우선, 없으면 타임스탬프)."""
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+    try:
+        commit = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=str(BASE_DIR),
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        if commit:
+            return f"{commit}-{stamp}"
+    except (subprocess.SubprocessError, FileNotFoundError, OSError):
+        pass
+    return stamp
+
+
+def stamp_service_worker(destination: Path, version: str) -> None:
+    """릴리스 sw.js 의 CACHE_VERSION 토큰을 유일한 값으로 교체한다(캐시버스팅)."""
+    text = destination.read_text(encoding="utf-8")
+    stamped, count = re.subn(
+        r'const CACHE_VERSION = "[^"]*";',
+        f'const CACHE_VERSION = "{version}";',
+        text,
+        count=1,
+    )
+    if count == 0:
+        raise SystemExit("sw.js 에서 CACHE_VERSION 토큰을 찾지 못했습니다. (캐시버스팅 실패)")
+    destination.write_text(stamped, encoding="utf-8")
 GENERATED_TEXT_FILES = {
     "DEPLOY-NOTES.txt": "\n".join(
         [
             "Study Helper for SA Tablet release bundle",
             "",
+            "기본(권장) 배포: GitHub Pages 자동 배포",
+            "- main 브랜치에 push 하면 .github/workflows/deploy-pages.yml 이 자동으로 배포합니다.",
+            "- 이 폴더를 수동으로 올릴 필요가 없습니다. (수동 업로드는 백업 수단)",
+            "",
+            "수동/대체 배포(Netlify 등 정적 호스팅):",
             "1. 이 폴더의 모든 파일을 Netlify 같은 정적 호스팅에 업로드합니다.",
             "2. 배포가 끝나면 HTTPS 주소를 갤럭시 태블릿에서 엽니다.",
             "3. manifest.webmanifest, sw.js, 카메라 권한, OCR 로딩을 먼저 확인합니다.",
             "4. 자세한 기능 점검은 TABLET-TEST-CHECKLIST.txt 순서대로 진행합니다.",
+            "",
+            "참고: 빌드 시 sw.js 의 캐시 버전이 자동으로 바뀌어, 새 배포가 옛 화면에 묶이지 않습니다.",
         ]
     ),
     "TABLET-TEST-CHECKLIST.txt": "\n".join(
@@ -79,6 +122,9 @@ def main():
         shutil.copy2(source, destination)
         copied_files.append(relative_path)
 
+    cache_version = resolve_cache_version()
+    stamp_service_worker(OUTPUT_DIR / "sw.js", cache_version)
+
     generated_files = []
     for relative_path, contents in GENERATED_TEXT_FILES.items():
         destination = OUTPUT_DIR / relative_path
@@ -87,6 +133,8 @@ def main():
 
     zip_path = shutil.make_archive(str(ZIP_BASE), "zip", root_dir=str(OUTPUT_DIR))
 
+    print(f"Cache version stamped into sw.js: {cache_version}")
+    print("")
     print("Release bundle created:")
     print(OUTPUT_DIR)
     print("")

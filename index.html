@@ -14,8 +14,21 @@
     <meta name="theme-color" content="#1e79ff" />
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="vendor/coway/tokens.css" />
+    <link rel="stylesheet" href="vendor/coway/coway-clean.css" />
+    <link rel="stylesheet" href="vendor/coway/coway-app.css" />
     <link rel="stylesheet" href="styles.css" />
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js" defer></script>
+    <script src="vendor/tesseract.min.js" defer></script>
+    <script>
+      // 로컬 글자 읽기 라이브러리를 못 불러오면 CDN에서 한 번 더 시도(첫 설치 안전망).
+      window.addEventListener("load", () => {
+        if (!window.Tesseract) {
+          const fallback = document.createElement("script");
+          fallback.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
+          document.head.appendChild(fallback);
+        }
+      });
+    </script>
     <script src="app.js" defer></script>
   </head>
   <body>
@@ -30,15 +43,20 @@
           </p>
         </div>
         <div class="hero-badges">
-          <span class="badge strong" id="app-mode-badge">로컬 OCR 모드</span>
-          <span class="badge">비용 없는 음성 안내</span>
-          <span class="badge">선택형 ChatGPT 보조</span>
+          <span class="badge strong" id="app-mode-badge">글자 읽기 준비 중</span>
+          <span class="badge">공짜 음성 안내</span>
+          <span class="badge">필요할 때만 ChatGPT</span>
         </div>
         <div class="hero-tips">
-          <span class="tip-chip">첫 실행은 인터넷 필요</span>
-          <span class="tip-chip">홈 화면 추가 추천</span>
-          <span class="tip-chip">기록은 이 기기에만 저장</span>
-          <span class="tip-chip">기본 사용은 GPT 로그인 불필요</span>
+          <span class="tip-chip">처음엔 인터넷이 필요해요</span>
+          <span class="tip-chip">홈 화면에 추가하면 편해요</span>
+          <span class="tip-chip">기록은 이 기기에만 저장돼요</span>
+        </div>
+        <div class="audience-row">
+          <button class="pill subtle compact" id="audience-toggle" type="button" aria-pressed="false">
+            부모 화면 보기
+          </button>
+          <span class="audience-note">아이 화면에서는 사진·힌트·정답만 크게 보여요.</span>
         </div>
       </header>
 
@@ -46,7 +64,7 @@
         <section class="panel">
           <div class="panel-head">
             <div>
-              <p class="panel-kicker">Capture</p>
+              <p class="panel-kicker">사진</p>
               <h2>카메라와 사진</h2>
             </div>
             <button class="pill subtle" id="install-button" type="button" hidden>
@@ -79,7 +97,7 @@
         <section class="panel">
           <div class="panel-head">
             <div>
-              <p class="panel-kicker">Prompt</p>
+              <p class="panel-kicker">도와줘</p>
               <h2>질문하기</h2>
             </div>
             <button class="pill subtle" id="voice-button" type="button">음성 입력</button>
@@ -125,9 +143,9 @@
             </button>
           </div>
 
-          <button class="pill primary wide" id="analyze-button" type="button">코칭 시작</button>
+          <button class="pill primary wide cta-big" id="analyze-button" type="button">이 문제 도와줘</button>
 
-          <div class="status-box" id="status-box">
+          <div class="status-box" id="status-box" aria-live="polite">
             문제를 준비한 뒤 코칭 시작을 눌러 주세요.
           </div>
         </section>
@@ -135,77 +153,77 @@
         <section class="panel result-panel">
           <div class="panel-head">
             <div>
-              <p class="panel-kicker">Focus</p>
-              <h2>읽은 문제와 코칭 결과</h2>
+              <p class="panel-kicker">읽은 문제</p>
+              <h2>읽은 문제와 도와주는 말</h2>
             </div>
           </div>
 
-          <div class="analysis-phase-row" aria-label="코칭 상태">
+          <div class="analysis-phase-row" aria-label="도와주는 상태">
             <button class="phase-pill is-active" id="analysis-phase-idle" data-phase-step="idle" type="button">
-              코칭 시작 전
+              시작 전
             </button>
             <button class="phase-pill" id="analysis-phase-processing" data-phase-step="processing" type="button">
-              진행 중
+              하는 중
             </button>
             <button class="phase-pill" id="analysis-phase-ready" data-phase-step="ready" type="button">
-              완료
+              다 됐어요
             </button>
           </div>
 
+          <div class="summary-grid">
+            <article class="summary-card">
+              <span>고른 문제</span>
+              <strong id="selected-problem-number">-</strong>
+            </article>
+            <article class="summary-card">
+              <span>문제 종류</span>
+              <strong id="problem-summary">아직 안 했어요</strong>
+            </article>
+          </div>
+
+          <div class="number-list" id="problem-number-list"></div>
+
+          <article class="info-card">
+            <h3>읽은 문제</h3>
+            <p id="source-excerpt-text">
+              사진이나 직접 적은 문제 문장이 여기에 보여요.
+            </p>
+          </article>
+
+          <article class="info-card">
+            <h3>문제 뜻</h3>
+            <p id="translation-text">
+              다 끝나면 쉬운 우리말로 문제 뜻을 알려줘요.
+            </p>
+          </article>
+
+          <article class="info-card highlight">
+            <h3>먼저 생각해볼 점</h3>
+            <p id="thinking-prompt-text">
+              정답 대신 먼저 봐야 할 단서를 알려줘요.
+            </p>
+          </article>
+
           <button
-            class="detail-toggle"
+            class="detail-toggle parent-only"
             id="result-details-toggle"
             type="button"
             aria-expanded="false"
             aria-controls="result-details"
           >
-            상세 내용
+            읽은 글자 원문 보기 (부모용)
           </button>
 
-          <div class="result-details" id="result-details" hidden>
+          <div class="result-details parent-only" id="result-details" hidden>
             <div class="detail-meta-row">
-              <span class="panel-pill" id="ocr-state-pill">OCR 대기 중</span>
-              <span class="detail-note">필요할 때만 읽은 문제와 해석을 펼쳐서 확인해 주세요.</span>
+              <span class="panel-pill" id="ocr-state-pill">글자 읽기 대기 중</span>
+              <span class="detail-note">필요할 때만 카메라가 읽은 원래 글자를 펼쳐서 확인해 주세요.</span>
             </div>
 
-            <div class="summary-grid">
-              <article class="summary-card">
-                <span>선택 문제</span>
-                <strong id="selected-problem-number">-</strong>
-              </article>
-              <article class="summary-card">
-                <span>문제 유형</span>
-                <strong id="problem-summary">아직 분석 전</strong>
-              </article>
-            </div>
-
-            <div class="number-list" id="problem-number-list"></div>
-
             <article class="info-card">
-              <h3>읽은 문제</h3>
-              <p id="source-excerpt-text">
-                사진이나 직접 입력한 문제 문장이 여기에 보입니다.
-              </p>
-            </article>
-
-            <article class="info-card">
-              <h3>문제 뜻</h3>
-              <p id="translation-text">
-                분석이 끝나면 쉬운 한국어로 문제 뜻을 알려줍니다.
-              </p>
-            </article>
-
-            <article class="info-card highlight">
-              <h3>먼저 생각해볼 점</h3>
-              <p id="thinking-prompt-text">
-                정답 대신 먼저 봐야 할 단서를 알려줍니다.
-              </p>
-            </article>
-
-            <article class="info-card">
-              <h3>OCR 전체 읽기</h3>
+              <h3>읽은 글자 원문</h3>
               <p id="ocr-text-full">
-                아직 OCR 결과가 없습니다.
+                아직 읽은 글자가 없어요.
               </p>
             </article>
           </div>
@@ -214,7 +232,7 @@
         <section class="panel">
           <div class="panel-head">
             <div>
-              <p class="panel-kicker">Hints</p>
+              <p class="panel-kicker">힌트</p>
               <h2>단계별 힌트</h2>
             </div>
           </div>
@@ -238,14 +256,18 @@
               <button class="pill secondary" id="reveal-answer-button" type="button">
                 정답과 풀이 열기
               </button>
+              <button class="pill subtle" id="deep-help-button" type="button">
+                📋 더 자세한 풀이 받기
+              </button>
             </div>
+            <p class="answer-help-note">더 자세한 풀이가 필요하면 위 버튼으로 ChatGPT에 붙여넣을 질문을 복사할 수 있어요.</p>
           </div>
         </section>
 
         <section class="panel">
           <div class="panel-head">
             <div>
-              <p class="panel-kicker">Share</p>
+              <p class="panel-kicker">더 도움받기</p>
               <h2>ChatGPT 보조</h2>
             </div>
           </div>
@@ -284,16 +306,16 @@
             </button>
           </div>
 
-          <div class="status-box quiet" id="speech-status-text">
+          <div class="status-box quiet" id="speech-status-text" aria-live="polite">
             힌트 카드나 마지막 단계 카드에서 자동 읽기를 누르면 내용을 읽어줘요.
           </div>
         </section>
 
-        <section class="panel">
+        <section class="panel parent-only">
           <div class="panel-head">
             <div>
-              <p class="panel-kicker">History</p>
-              <h2>최근 코칭 기록</h2>
+              <p class="panel-kicker">지난 기록</p>
+              <h2>최근에 도와준 기록</h2>
             </div>
             <button class="pill subtle" id="clear-history-button" type="button">
               기록 지우기
@@ -314,7 +336,7 @@
       <div class="camera-overlay-shell">
         <div class="camera-overlay-top">
           <div>
-            <p class="panel-kicker">Capture</p>
+            <p class="panel-kicker">사진</p>
             <h2>전체화면 촬영</h2>
           </div>
           <button class="pill subtle compact" id="close-camera-button" type="button">

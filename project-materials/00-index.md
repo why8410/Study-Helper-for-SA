@@ -5,9 +5,9 @@
 
 ## Codex 스레드 범위
 
-- 작업 경로: `/Users/choeyuna/문서/프로젝트/Y/Study Helper for SA/Tablet`
+- 작업 경로: `/Users/choeyuna/Y's Work/프로젝트/Y/Study Helper for SA/Tablet`
 - 이 스레드는 태블릿 버전의 기획, 구현, 배포, 디바이스 테스트 문서를 직접 다룹니다.
-- `Mobile`과 공통으로 바뀌는 정책이나 우선순위는 `/Users/choeyuna/문서/프로젝트/Y/Study Helper for SA/project-materials/`와 함께 정리합니다.
+- `Mobile`과 공통으로 바뀌는 정책이나 우선순위는 `/Users/choeyuna/Y's Work/프로젝트/Y/Study Helper for SA/project-materials/`와 함께 정리합니다.
 
 ## 먼저 보면 좋은 순서
 
@@ -64,7 +64,7 @@
 
 - 프로젝트명: `Study Helper for SA Tablet`
 - 화면 표시 서비스명: `Study Helper for SA`
-- 프로젝트 폴더: `/Users/choeyuna/문서/프로젝트/Y/Study Helper for SA/Tablet`
+- 프로젝트 폴더: `/Users/choeyuna/Y's Work/프로젝트/Y/Study Helper for SA/Tablet`
 - 현재 앱 형태: `PWA 웹앱`
 - 주요 입력 방식: 카메라, 사진 업로드, 음성 입력, 직접 입력
 - 주요 보조 방식: 로컬 OCR, OCR 전처리, 힌트형 코칭, 태블릿 음성 안내, ChatGPT 질문 복사/공유, 최근 기록 저장
